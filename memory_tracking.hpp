@@ -237,16 +237,20 @@ enum {
     key_pool_ind_plain2blocked_cvt,
     key_pool_src_bf16cvt,
     key_pool_src_plain2blocked_cvt,
+    key_pool_reduction,
     key_precomputed_scales,
     key_prelu_reduction,
     key_reducer_space,
     key_reducer_space_bctx,
     key_reduction,
+    key_reduction_1,
     key_reorder_cross_space,
     key_reorder_space,
-    key_reorder_scales,
+    key_reorder_src_scales,
+    key_reorder_dst_scales,
     key_reorder_wino_plain,
     key_reorder_wino_transform_space,
+    key_reorder_precomputed_dst_scales,
     key_reorder_rnn_space,
     key_reorder_rnn_weights_bf16_cvt,
     key_reorder_rnn_weights_quantization,
@@ -474,12 +478,14 @@ struct grantor_t {
         , exec_ctx_(parent.exec_ctx_) {}
 
     template <typename T = void>
-    T *get(const key_t &key) const {
+    T *get(const key_t &key, size_t *size = nullptr) const {
         if (!base_mem_storage_) {
             assert(registry_.size() == 0);
             return nullptr;
         }
         auto e = registry_.get(make_key(prefix_, key));
+
+        if (size) *size = e.size;
         if (e.size == 0) return nullptr;
 
         char *host_storage_ptr = get_host_storage_ptr(base_mem_storage_);
