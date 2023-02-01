@@ -25,9 +25,18 @@ namespace impl {
 namespace gpu {
 namespace amd {
 
-miopenHandle_t &sycl_hip_stream_t::get_miopen_handle() {
+rocblas_handle &sycl_hip_stream_t::get_rocblas_handle(HIPstream hip_stream) {
+    if (!hip_stream) hip_stream = get_underlying_stream();
     auto e = utils::downcast<sycl_hip_engine_t *>(engine());
-    e->activate_stream_miopen(this);
+    assert(e->context() == queue().get_context());
+    e->activate_stream_rocblas(hip_stream);
+    return *(e->get_rocblas_handle());
+}
+miopenHandle_t &sycl_hip_stream_t::get_miopen_handle(HIPstream hip_stream) {
+    auto e = utils::downcast<sycl_hip_engine_t *>(engine());
+    assert(e->context() == queue().get_context());
+    if (!hip_stream) hip_stream = get_underlying_stream();
+    e->activate_stream_miopen(hip_stream);
     return *(e->get_miopen_handle());
 }
 // the sycl_hip_stream_t will not own this. it is an observer pointer
@@ -38,6 +47,11 @@ HIPstream sycl_hip_stream_t::get_underlying_stream() {
 // the sycl_hip_stream_t will not own this. it is an observer pointer
 HIPcontext sycl_hip_stream_t::get_underlying_context() {
     return compat::get_native<HIPcontext>(queue_->get_context());
+}
+
+// the sycl_hip_stream_t will not own this. it is an observer pointer
+HIPdevice sycl_hip_stream_t::get_underlying_device() {
+    return compat::get_native<HIPdevice>(queue_->get_device());
 }
 
 status_t sycl_hip_stream_t::init() {
@@ -52,37 +66,23 @@ status_t sycl_hip_stream_t::init() {
     if (!queue_) {
         auto &sycl_ctx = sycl_engine.context();
         auto &sycl_dev = sycl_engine.device();
-        if (!sycl_engine.is_service_stream_created()) {
-                //queue_.reset(new ::sycl::queue(sycl_ctx, sycl_dev));
-                queue_.reset(new ::sycl::queue(sycl_ctx, sycl_dev, ::sycl::property_list {::sycl::property::queue::in_order {}}));
-            }
-        else {
-            stream_t *service_stream;
-            CHECK(sycl_engine.get_service_stream(service_stream));
-            auto sycl_stream = utils::downcast<sycl_stream_t *>(service_stream);
-            queue_.reset(new ::sycl::queue(sycl_stream->queue()));
-        }
+        queue_.reset(new ::sycl::queue(sycl_ctx, sycl_dev));
     } else {
-        auto queue_streamId = get_underlying_stream();
+        // We need to check that the given queue is associated with
+        // the device and context of the engine.
         auto sycl_dev = queue().get_device();
         bool args_ok
                 = engine()->kind() == engine_kind::gpu && sycl_dev.is_gpu();
         if (!args_ok) return status::invalid_arguments;
 
         auto queue_context = get_underlying_context();
-        HIPdevice queue_device = compat::get_native<HIPdevice>(sycl_dev);
+        auto queue_device = get_underlying_device();
 
         auto engine_context = sycl_engine.get_underlying_context();
-        auto engine_device
-                = compat::get_native<HIPdevice>(sycl_engine.device());
+        auto engine_device = sycl_engine.get_underlying_device();
 
-        stream_t *service_stream;
-        CHECK(sycl_engine.get_service_stream(service_stream));
-        auto hip_stream = utils::downcast<sycl_hip_stream_t *>(service_stream);
-        auto engine_streamId = hip_stream->get_underlying_stream();
         status = ((engine_device != queue_device)
-                         || (engine_context != queue_context)
-                         || (engine_streamId != queue_streamId))
+                         || (engine_context != queue_context))
                 ? status::invalid_arguments
                 : status::success;
     }

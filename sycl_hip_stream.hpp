@@ -17,6 +17,7 @@
 
 #ifndef GPU_AMD_SYCL_HIP_STREAM_HPP
 #define GPU_AMD_SYCL_HIP_STREAM_HPP
+#include <rocblas.h>
 #include "common/engine.hpp"
 #include "sycl/sycl_stream.hpp"
 #include <hip/hip_runtime.h>
@@ -31,7 +32,8 @@ class sycl_hip_stream_t : public dnnl::impl::sycl::sycl_stream_t {
 public:
     using base_t = dnnl::impl::sycl::sycl_stream_t;
 
-    miopenHandle_t &get_miopen_handle();
+    miopenHandle_t &get_miopen_handle(HIPstream hip_stream = nullptr);
+    rocblas_handle &get_rocblas_handle(HIPstream hip_stream = nullptr);
 
     static status_t create_stream(
             stream_t **stream, engine_t *engine, unsigned flags) {
@@ -61,6 +63,7 @@ public:
     status_t interop_task(std::function<void(::sycl::handler &)>);
     hipStream_t get_underlying_stream();
     hipCtx_t get_underlying_context();
+    hipDevice_t get_underlying_device();
 
 private:
     status_t init();

@@ -52,7 +52,7 @@ struct miopen_convolution_fwd_t : public primitive_t {
             bool ok = utils::one_of(desc()->prop_kind,
                     prop_kind::forward_training, prop_kind::forward_inference);
             ok = ok && attr()->has_default_values(attr_skip_mask);
-            ok = ok && post_ops_ok(attr());
+            ok = ok && attr_post_ops_ok(attr());
             ok = ok
                     && (utils::everyone_is(f32, src_md_.data_type,
                                 weights_md_.data_type, dst_md_.data_type)
@@ -87,7 +87,8 @@ struct miopen_convolution_fwd_t : public primitive_t {
             std::cout<<"srcmd_format :"<<src_md_.format_kind<<std::endl;
             std::cout<<"dstmd_format :"<<dst_md_.format_kind<<std::endl;
             std::cout<<"weightmd_format :"<<weights_md_.format_kind<<std::endl;
-
+            std::cout<<"bias_datatype :"<<bias_md_.data_type<<std::endl;
+            
             //ok = ok && check_format();
             //std::cout<<"check_format_ok :"<< check_format() <<std::endl;
 
@@ -141,8 +142,7 @@ struct miopen_convolution_fwd_t : public primitive_t {
                     std::cout << ".hpp "<<"dat_tag= "<<dat_tag<<std::endl;
                     std::cout << ".hpp "<<"wei_tag= "<<wei_tag<<std::endl;
                 return set_default_formats_common(dat_tag, wei_tag, dat_tag);
-            } //else if(src_md_.data_type == dnnl_f16) {}
-                else {
+            } else {
                 std::cout << ".hpp "<<__LINE__<<" : "<<__func__<<std::endl;
                 auto dat_tag = utils::pick(ndims() - 3, ncw, nchw, ncdhw);
                 auto wei_tag = with_groups()
@@ -152,26 +152,6 @@ struct miopen_convolution_fwd_t : public primitive_t {
                     std::cout << ".hpp "<<"wei_tag= "<<wei_tag<<std::endl;
                 return set_default_formats_common(dat_tag, wei_tag, dat_tag);
             }
-        }
-
-        bool post_ops_ok(const primitive_attr_t *attr) const {
-            const auto &p = attr->post_ops_;
-            auto is_eltwise
-                    = [&](int idx) { return p.entry_[idx].is_eltwise(false); };
-            auto is_sum = [&](int idx) { return p.entry_[idx].is_sum(false); };
-
-            switch (p.len()) {
-                case 0: return true; // no post_ops
-                case 1: return is_eltwise(0) || is_sum(0); // sum OR eltwise
-                case 2:
-                    if (src_md_.data_type == dnnl_s8 && is_eltwise(0)
-                            && is_sum(1))
-                        return true;
-                    return (is_sum(0) && is_eltwise(1));
-                default: return false;
-            }
-
-            return false;
         }
 
         bool check_s8_configuration() const {
